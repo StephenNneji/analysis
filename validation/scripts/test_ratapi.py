@@ -8,7 +8,6 @@ from test_discovery import get_test_data
 
 import ratapi
 
-
 tests = list(get_test_data())
 ids = [f"{t[0]}" for t in tests]
 
@@ -46,7 +45,7 @@ def test_ratapi(nsd):
 
 def kernel_test(slabs, data):
     """
-    Test the reflectivity kernel for ratapi. 
+    Test the reflectivity kernel for ratapi.
 
     Parameters
     ----------
@@ -55,14 +54,16 @@ def kernel_test(slabs, data):
     data: np.ndarray
         Q, R arrays
     """
-    problem = ratapi.Project(name="test", model="custom layers", absorption=True)
+    problem = ratapi.Project(
+        name="test", model="custom layers", absorption=True
+    )
     problem.scalefactors.set_fields(0, min=1, value=1, max=1)
     problem.background_parameters.set_fields(0, min=0, value=0, max=0)
     problem.resolution_parameters.set_fields(0, min=0, value=0, max=0)
 
     with np.printoptions(threshold=sys.maxsize):
-        slab_string = np.array2string(slabs, separator=', ')
-    
+        slab_string = np.array2string(slabs, separator=", ")
+
     # Write a custom file that conatains the slabs.
     with tempfile.NamedTemporaryFile("w+", suffix=".py", delete=False) as f:
         f.write(TEST_FUNC.format(slabs=slab_string))
@@ -74,9 +75,25 @@ def kernel_test(slabs, data):
         bulk_in = slabs[0, 1] * 1e-6
         bulk_out = slabs[-1, 1] * 1e-6
 
-        problem.parameters.set_fields(0, min=sub_rough, value=sub_rough, max=sub_rough)
-        problem.bulk_in.set_fields(0, name="Bulk In", min=bulk_in, value=bulk_in, max=bulk_in, fit=False)
-        problem.bulk_out.set_fields(0, name="Bulk Out", min=bulk_out, value=bulk_out, max=bulk_out, fit=False)
+        problem.parameters.set_fields(
+            0, min=sub_rough, value=sub_rough, max=sub_rough
+        )
+        problem.bulk_in.set_fields(
+            0,
+            name="Bulk In",
+            min=bulk_in,
+            value=bulk_in,
+            max=bulk_in,
+            fit=False,
+        )
+        problem.bulk_out.set_fields(
+            0,
+            name="Bulk Out",
+            min=bulk_out,
+            value=bulk_out,
+            max=bulk_out,
+            fit=False,
+        )
 
         # RAT expects minimum of 3 columns in data so add zero column.
         data = np.column_stack((data, np.zeros(len(data))))
@@ -105,9 +122,11 @@ def kernel_test(slabs, data):
 
         controls = ratapi.Controls(display="off")
         problem, results = ratapi.run(problem, controls)
-        
-        np.testing.assert_allclose(results.reflectivity[0][:, 1], data[:, 1], rtol=8e-5)
-        
+
+        np.testing.assert_allclose(
+            results.reflectivity[0][:, 1], data[:, 1], rtol=8e-5
+        )
+
         f.close()
         os.remove(f.name)
 
