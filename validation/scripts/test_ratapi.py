@@ -36,11 +36,7 @@ def test_ratapi(nsd):
     """
     _, slabs, data = nsd
 
-    if data.shape[1] == 4:
-        pytest.skip("Skipping resolution tests.")
-    elif data.shape[1] < 4:
-        # no resolution data, just test kernel
-        kernel_test(slabs, data)
+    kernel_test(slabs, data)
 
 
 def kernel_test(slabs, data):
@@ -54,12 +50,17 @@ def kernel_test(slabs, data):
     data: np.ndarray
         Q, R arrays
     """
+    is_resolution_test = data.shape[1] == 4
+
     problem = ratapi.Project(
         name="test", model="custom layers", absorption=True
     )
     problem.scalefactors.set_fields(0, min=1, value=1, max=1)
     problem.background_parameters.set_fields(0, min=0, value=0, max=0)
-    problem.resolution_parameters.set_fields(0, min=0, value=0, max=0)
+    sigma = 0.021233045007200 if is_resolution_test else 0
+    problem.resolution_parameters.set_fields(
+        0, min=sigma, value=sigma, max=sigma
+    )
 
     with np.printoptions(threshold=sys.maxsize):
         slab_string = np.array2string(slabs, separator=", ")
@@ -95,9 +96,24 @@ def kernel_test(slabs, data):
             fit=False,
         )
 
-        # RAT expects minimum of 3 columns in data so add zero column.
-        data = np.column_stack((data, np.zeros(len(data))))
-        problem.data.append(name="Data", data=data)
+        if is_resolution_test:
+            # Using linearly spaced points similar to the ref1d test
+            n_points = 10000
+
+            argmin = np.argmin(data[:, 0])
+            argmax = np.argmax(data[:, 0])
+            data_more_points = np.zeros((n_points, 3))
+
+            data_more_points[:, 0] = np.linspace(
+                data[argmin, 0] - 3.5 * data[argmin, 3],
+                data[argmax, 0] + 3.5 * data[argmax, 3],
+                n_points,
+            )
+            problem.data.append(name="Data", data=data_more_points)
+        else:
+            # RAT expects minimum of 3 columns in data so add zero column.
+            data = np.column_stack((data, np.zeros(len(data))))
+            problem.data.append(name="Data", data=data)
 
         problem.custom_files.append(
             name="Model",
@@ -123,9 +139,17 @@ def kernel_test(slabs, data):
         controls = ratapi.Controls(display="off")
         problem, results = ratapi.run(problem, controls)
 
-        np.testing.assert_allclose(
-            results.reflectivity[0][:, 1], data[:, 1], rtol=8e-5
-        )
+        if is_resolution_test:
+            ref = np.interp(
+                data[:, 0],
+                data_more_points[:, 0],
+                results.reflectivity[0][:, 1],
+            )
+            np.testing.assert_allclose(ref, data[:, 1], rtol=0.033)
+        else:
+            np.testing.assert_allclose(
+                results.reflectivity[0][:, 1], data[:, 1], rtol=8e-5
+            )
 
         f.close()
         os.remove(f.name)
